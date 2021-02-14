@@ -1,0 +1,56 @@
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.7.570/pdf.min.js"></script>
+<script>
+function pFileReader(file){
+  return new Promise((resolve, reject) => {
+    var fr = new FileReader();
+    fr.onload = (e) => resolve(new Uint8Array(e.target.result));
+    fr.readAsArrayBuffer(file);
+  });
+}
+
+const grepPDF = async (pdfFile, pattern) => {
+  const data = await pFileReader(pdfFile)
+  const pdf = await pdfjsLib.getDocument({data}).promise
+  return Promise.all(Array.from(Array(pdf.numPages).keys()).map(async (pageIndex) => {
+    const page = await pdf.getPage(pageIndex+1)
+    const textContent = await page.getTextContent()
+    return textContent.items.map((i) => i.str.replace(/\s+/g, ' ')).filter((x) => x.indexOf(pattern) !== -1).map((x) => `${pdfFile.name}: ${x}`)
+  }).flat())
+}
+async function dropHandler(ev) {
+  document.getElementById('results').innerText = '';
+  appendOutput = (output) => document.getElementById('results').innerText += output + '\n'
+
+  const pattern = document.getElementById('pattern').value
+  ev.preventDefault();
+  if (ev.dataTransfer.items) {
+    for (var i = 0; i < ev.dataTransfer.items.length; i++) {
+      if (ev.dataTransfer.items[i].kind === 'file') {
+        var file = ev.dataTransfer.items[i].getAsFile();
+        appendOutput((await grepPDF(file, pattern)).join('\n'))
+      }
+    }
+  } else {
+    for (var i = 0; i < ev.dataTransfer.files.length; i++) {
+      appendOutput((await grepPDF(ev.dataTransfer.files[i], pattern)).join('\n'))
+    }
+  }
+  appendOutput('Done!')
+}
+window.onload = () => {
+  const holder = document.getElementsByTagName('pre')[0]
+  holder.ondrop = dropHandler;
+  holder.ondragover = (e) => e.preventDefault()
+}
+</script>
+<style>
+html, body { margin: 0; padding:  0; }
+pre { width: 100%; height: 100%; }
+pre:empty { border: 3px dashed #999; }
+</style>
+<label>
+Pattern:
+<input type="text" id="pattern" value="4815" />
+</label><br/>
+Drop files here:
+<pre id="results"></pre>
